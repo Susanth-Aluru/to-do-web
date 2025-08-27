@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Beautiful To-Do — Server-backed (fixed UI)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{ --bg1:#0f172a; --bg2:#0b1220; --card:rgba(255,255,255,0.04); --accent:#7c3aed; --muted:rgba(255,255,255,0.6); color-scheme:dark; }
+    *{box-sizing:border-box} html,body{height:100%} body{margin:0;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;background:radial-gradient(800px 400px at 10% 10%, rgba(124,58,237,0.12), transparent), linear-gradient(180deg,var(--bg1),var(--bg2));color:#eef2ff;padding:32px;display:flex;align-items:center;justify-content:center;gap:20px;}
+    .wrap{width:100%;max-width:1100px;display:grid;grid-template-columns:360px 1fr;gap:24px;align-items:start;}
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.015));border-radius:16px;padding:22px;box-shadow:0 8px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.04);}
+    h1{margin:0 0 8px 0;font-size:20px} p.lead{margin:0 0 18px 0;color:var(--muted);font-size:13px}
+    .auth .form-row{display:flex;flex-direction:column;margin-bottom:12px} label{font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=text],input[type=password]{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:10px 12px;border-radius:10px;color:inherit;outline:none}
+    .btn{display:inline-flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#4f46e5);color:white;font-weight:600;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .muted{color:var(--muted);font-size:13px}
+    .tab-row{display:flex;gap:8px;margin-bottom:14px}
+    .tab{flex:1;padding:10px;border-radius:10px;text-align:center;cursor:pointer;border:1px solid transparent}
+    .tab.active{background:linear-gradient(90deg, rgba(124,58,237,0.12), rgba(79,70,229,0.08));border-color:rgba(124,58,237,0.16)}
+    .todo-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .welcome{font-size:14px} .small-muted{color:var(--muted);font-size:13px}
+    .add-row{display:flex;gap:8px;margin-top:18px} .add-row input{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    .list{margin-top:18px;display:flex;flex-direction:column;gap:10px;min-height:120px}
+    .todo-item{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border:1px solid rgba(255,255,255,0.03)}
+    .todo-item.dragging{opacity:0.6}
+    .todo-item .title{flex:1}
+    .todo-item .title.done{text-decoration:line-through;color:rgba(255,255,255,0.5)}
+    .pill{padding:6px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.03)}
+    .controls{display:flex;gap:8px;align-items:center} .icon-btn{background:transparent;border:0;padding:6px;border-radius:8px;cursor:pointer} .small{font-size:12px}
+    footer.note{margin-top:16px;color:var(--muted);font-size:12px}
+    .compact-account{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03)}
+    @media (max-width:960px){ .wrap{grid-template-columns:1fr;max-width:680px} }
+    input:focus{box-shadow:0 6px 18px rgba(124,58,237,0.06);border-color:rgba(124,58,237,0.36)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Auth Panel: will be hidden after login -->
+    <div class="panel auth" id="authPanel">
+      <h1>Beautiful To-Do — Account</h1>
+      <p class="lead">Sign up & login backed by the server. After login the panel is hidden to focus on tasks.</p>
+
+      <div class="tab-row">
+        <div class="tab active" id="tabLogin">Login</div>
+        <div class="tab" id="tabSignup">Sign up</div>
+      </div>
+
+      <div id="loginForm">
+        <div class="form-row"><label>Username</label><input id="loginUser" type="text" placeholder="username (no spaces)" autocomplete="username" /></div>
+        <div class="form-row"><label>Password</label><input id="loginPass" type="password" placeholder="password" autocomplete="current-password" /></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <button class="btn" id="btnLogin">Sign in</button>
+          <button class="btn ghost" id="btnDemo">Try demo</button>
+        </div>
+      </div>
+
+      <div id="signupForm" style="display:none">
+        <div class="form-row"><label>Choose a username</label><input id="signupUser" type="text" placeholder="username (letters/numbers)" autocomplete="new-username" /></div>
+        <div class="form-row"><label>Create a password</label><input id="signupPass" type="password" placeholder="password" autocomplete="new-password" /></div>
+        <div class="form-row"><label>Confirm password</label><input id="signupPass2" type="password" placeholder="repeat password" /></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <button class="btn" id="btnSignup">Create account</button>
+          <button class="btn ghost" id="btnResetLocal">Reset local</button>
+        </div>
+        <p class="muted" style="margin-top:12px">Accounts are stored on server files: users.json & todos.json.</p>
+      </div>
+
+      <div style="margin-top:14px;border-top:1px dashed rgba(255,255,255,0.03);padding-top:12px">
+        <div class="muted small">Quick tips</div>
+
+      </div>
+    </div>
+
+    <!-- Todo Panel -->
+    <div class="panel" id="todoPanel" style="min-height:480px;">
+      <div id="topAccountArea" style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="welcome" id="who">Welcome — please sign in</div>
+          <div class="small-muted" id="joined"></div>
+        </div>
+        <div class="controls" id="topControls">
+          <!-- When logged in, compact account will be shown here -->
+          <div id="compactAccountWrapper" style="display:none">
+            <div class="compact-account" id="compactAccount">
+              <div id="acctName">—</div>
+              <div id="acctJoined" style="font-size:12px;color:var(--muted)"></div>
+              <button class="btn ghost" id="btnExport" title="Export tasks">Export</button>
+              <button class="btn ghost" id="btnImport" title="Import tasks">Import</button>
+              <button class="btn ghost" id="btnLogout" title="Logout">Logout</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="add-row" style="margin-top:18px">
+        <input id="newTask" placeholder="Add a new task and press Enter" />
+        <button class="btn" id="btnAdd">Add</button>
+      </div>
+
+      <div class="list" id="list"></div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
+        <button class="btn ghost" id="btnClearDone">Clear completed</button>
+        <div style="flex:1"></div>
+        <div class="muted small" id="stats">0 tasks</div>
+      </div>
+
+      
+    </div>
+
+  </div>
+
+<script>
+/*
+ Updated frontend:
+  - Tasks are only loaded after successful login
+  - Auth panel is hidden after login; compact account shown
+  - On logout, auth panel reappears and tasks are cleared
+  - Uses the Flask backend endpoints (/api/...)
+*/
+
+const API_BASE = ""; // same origin
+
+// small fetch wrapper that attaches Bearer token if present
+async function api(path, opts = {}) {
+  opts.headers = opts.headers || {};
+  if (opts.body && typeof opts.body === 'object') {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  const token = localStorage.getItem('todo_token');
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json().catch(()=>null);
+  if (!res.ok) {
+    const msg = data && data.error ? data.error : `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function el(q){ return document.querySelector(q); }
+const nodes = {
+  authPanel: el('#authPanel'), tabLogin: el('#tabLogin'), tabSignup: el('#tabSignup'),
+  loginForm: el('#loginForm'), signupForm: el('#signupForm'),
+  btnSignup: el('#btnSignup'), btnLogin: el('#btnLogin'), btnDemo: el('#btnDemo'),
+  btnLogout: el('#btnLogout'), who: el('#who'), joined: el('#joined'),
+  list: el('#list'), newTask: el('#newTask'), btnAdd: el('#btnAdd'), stats: el('#stats'),
+  btnClearDone: el('#btnClearDone'), btnExport: el('#btnExport'), btnImport: el('#btnImport'),
+  compactAccountWrapper: el('#compactAccountWrapper'), acctName: el('#acctName'), acctJoined: el('#acctJoined')
+};
+
+let currentUser = null;
+let currentMeta = null; // user meta returned from /api/login
+
+// Tab toggles
+function setActiveTab(which){
+  nodes.tabLogin.classList.toggle('active', which==='login');
+  nodes.tabSignup.classList.toggle('active', which==='signup');
+  nodes.loginForm.style.display = which==='login' ? 'block' : 'none';
+  nodes.signupForm.style.display = which==='signup' ? 'block' : 'none';
+}
+nodes.tabLogin.addEventListener('click', ()=>setActiveTab('login'));
+nodes.tabSignup.addEventListener('click', ()=>setActiveTab('signup'));
+
+// UI helpers: hide auth panel on login; show compact account
+function showCompactAccount(user, meta){
+  nodes.compactAccountWrapper.style.display = 'block';
+  nodes.acctName.textContent = user;
+  nodes.acctJoined.textContent = meta && meta.createdAt ? new Date(meta.createdAt).toLocaleString() : '';
+}
+function hideCompactAccount(){
+  nodes.compactAccountWrapper.style.display = 'none';
+  nodes.acctName.textContent = '';
+  nodes.acctJoined.textContent = '';
+}
+function onSuccessfulLogin(user, meta){
+  // hide the big auth panel to avoid showing login fields after login
+  nodes.authPanel.style.display = 'none';
+  currentUser = user;
+  currentMeta = meta;
+  nodes.who.textContent = `Hi, ${user}`;
+  nodes.joined.textContent = `joined: ${meta.createdAt ? new Date(meta.createdAt).toLocaleString() : ''}`;
+  showCompactAccount(user, meta);
+  loadAndRender(); // now safe to request tasks from server
+}
+function onLogoutUI(){
+  // show auth panel again
+  nodes.authPanel.style.display = 'block';
+  hideCompactAccount();
+  currentUser = null;
+  currentMeta = null;
+  nodes.who.textContent = 'Welcome — please sign in';
+  nodes.joined.textContent = '';
+  nodes.list.innerHTML = '';
+  nodes.stats.textContent = '0 tasks';
+}
+
+// Signup
+nodes.btnSignup.addEventListener('click', async ()=>{
+  const name = el('#signupUser').value.trim();
+  const p1 = el('#signupPass').value;
+  const p2 = el('#signupPass2').value;
+  if(!name || !p1) return alert('enter username & password');
+  if(p1 !== p2) return alert('passwords do not match');
+  try{
+    await api('/api/signup', { method: 'POST', body: { username: name, password: p1 }});
+    alert('account created — now log in');
+    setActiveTab('login');
+  }catch(e){ alert('signup failed: ' + e.message); }
+});
+
+// Login
+nodes.btnLogin.addEventListener('click', async ()=>{
+  const name = el('#loginUser').value.trim();
+  const pass = el('#loginPass').value;
+  if(!name || !pass) return alert('enter username & password');
+  try{
+    const res = await api('/api/login', { method: 'POST', body: { username: name, password: pass }});
+    localStorage.setItem('todo_token', res.token);
+    onSuccessfulLogin(res.user.username, res.user);
+  }catch(e){ alert('login failed: ' + e.message); }
+});
+
+// Demo login (server-backed demo user)
+nodes.btnDemo.addEventListener('click', async ()=>{
+  const demoUser = 'demo';
+  try{
+    // try to create demo (if exists, the server returns 400 and we ignore)
+    await api('/api/signup', { method:'POST', body: { username: demoUser, password:'demo-pass' }});
+  }catch(e){ /* ignore if exists */ }
+  try{
+    const res = await api('/api/login', { method:'POST', body: { username: demoUser, password:'demo-pass' }});
+    localStorage.setItem('todo_token', res.token);
+    onSuccessfulLogin(res.user.username, res.user);
+  }catch(e){ alert('demo login failed: ' + e.message); }
+});
+
+// Logout (server-side + UI)
+el('#btnLogout').addEventListener('click', async ()=>{
+  try{ await api('/api/logout', { method: 'POST' }); }catch(e){ /* ignore */ }
+  localStorage.removeItem('todo_token');
+  onLogoutUI();
+});
+
+// Load tasks after login
+async function loadAndRender(){
+  if(!localStorage.getItem('todo_token')) return; // safety: no token then do nothing
+  try{
+    const res = await api('/api/tasks', { method: 'GET' });
+    renderTodos(res.todos || []);
+  }catch(e){
+    // token might be invalid; clear it and require login again
+    console.warn('load tasks failed', e);
+    localStorage.removeItem('todo_token');
+    onLogoutUI();
+  }
+}
+
+function renderTodos(arr){
+  nodes.list.innerHTML = '';
+  arr.forEach(item=>{
+    const row = document.createElement('div'); row.className = 'todo-item'; row.dataset.id = item.id;
+    const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!item.done;
+    chk.addEventListener('change', async ()=>{
+      try{ await api('/api/tasks/' + item.id, { method: 'PUT', body: { done: chk.checked } }); await loadAndRender(); }catch(e){ alert('update failed: ' + e.message); }
+    });
+    const t = document.createElement('div'); t.className = 'title'; t.textContent = item.title; if(item.done) t.classList.add('done');
+    t.contentEditable = true;
+    t.addEventListener('blur', async ()=>{ const newTitle = t.textContent.trim() || '(empty)'; try{ await api('/api/tasks/' + item.id, { method:'PUT', body:{ title: newTitle } }); await loadAndRender(); }catch(e){ alert('update failed: ' + e.message); } });
+    t.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); t.blur(); } });
+    const meta = document.createElement('div'); meta.className='small-muted'; meta.textContent = new Date(item.createdAt).toLocaleString();
+    const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center';
+    const btnStar = document.createElement('button'); btnStar.className='icon-btn'; btnStar.textContent = item.important ? '⭐' : '☆';
+    btnStar.addEventListener('click', async ()=>{ try{ await api('/api/tasks/' + item.id, { method:'PUT', body:{ important: !item.important } }); await loadAndRender(); }catch(e){ alert('update failed: ' + e.message); }});
+    const btnDel = document.createElement('button'); btnDel.className='icon-btn'; btnDel.textContent = '🗑️';
+    btnDel.addEventListener('click', async ()=>{ if(!confirm('Delete this task?')) return; try{ await api('/api/tasks/' + item.id, { method:'DELETE' }); await loadAndRender(); }catch(e){ alert('delete failed: ' + e.message); }});
+    right.appendChild(btnStar); right.appendChild(btnDel);
+    row.appendChild(chk);
+    const mid = document.createElement('div'); mid.style.display='flex'; mid.style.flexDirection='column'; mid.style.gap='6px'; mid.style.flex='1'; mid.appendChild(t); mid.appendChild(meta);
+    row.appendChild(mid); row.appendChild(right);
+    // drag and reorder (client) - DOM change then post order to server
+    row.draggable = true;
+    row.addEventListener('dragstart', e=>{ row.classList.add('dragging'); e.dataTransfer.setData('text/plain', item.id); });
+    row.addEventListener('dragend', ()=>{ row.classList.remove('dragging'); });
+    nodes.list.appendChild(row);
+  });
+
+  // dragover/reorder
+  nodes.list.addEventListener('dragover', e=>{
+    e.preventDefault();
+    const dragging = nodes.list.querySelector('.dragging');
+    const after = getDragAfterElement(nodes.list, e.clientY);
+    if(!dragging) return;
+    if(after == null) nodes.list.appendChild(dragging); else nodes.list.insertBefore(dragging, after);
+  });
+  nodes.list.addEventListener('drop', async ()=>{
+    // commit order
+    const ids = Array.from(nodes.list.children).map(n=>n.dataset.id);
+    try{ await api('/api/tasks/reorder', { method:'POST', body:{ order: ids }}); await loadAndRender(); }catch(e){ console.warn('reorder failed', e); }
+  });
+
+  const total = arr.length; const done = arr.filter(x=>x.done).length;
+  nodes.stats.textContent = `${done} / ${total} completed`;
+}
+
+function getDragAfterElement(container, y){
+  const draggableElements = [...container.querySelectorAll('.todo-item:not(.dragging)')];
+  return draggableElements.reduce((closest, child)=>{
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height/2;
+    if(offset < 0 && offset > closest.offset){ return { offset, element: child }; } else return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Create new task (POST)
+nodes.btnAdd.addEventListener('click', addTask);
+nodes.newTask.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addTask(); } });
+async function addTask(){
+  if(!localStorage.getItem('todo_token')) return alert('please log in first');
+  const txt = nodes.newTask.value.trim(); if(!txt) return;
+  try{ await api('/api/tasks', { method:'POST', body:{ title: txt }}); nodes.newTask.value=''; await loadAndRender(); }catch(e){ alert('create failed: ' + e.message); }
+}
+
+// Clear completed
+nodes.btnClearDone.addEventListener('click', async ()=>{
+  if(!localStorage.getItem('todo_token')) return alert('please log in first');
+  try{
+    const res = await api('/api/tasks', { method: 'GET' });
+    const done = (res.todos || []).filter(t => t.done);
+    for(const t of done) await api('/api/tasks/' + t.id, { method:'DELETE' });
+    await loadAndRender();
+  }catch(e){ console.warn(e); }
+});
+
+// Export/import buttons in compact account
+el('#btnExport').addEventListener('click', async ()=>{
+  if(!localStorage.getItem('todo_token')) return alert('login to export');
+  try{ const payload = await api('/api/export', { method:'GET' }); const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${payload.meta.user}_todos.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); }catch(e){ alert('export failed: '+e.message); }
+});
+el('#btnImport').addEventListener('click', ()=> {
+  if(!localStorage.getItem('todo_token')) return alert('login to import');
+  const f = document.createElement('input'); f.type='file'; f.accept='application/json'; f.onchange = async e => {
+    const file = e.target.files[0]; if(!file) return;
+    const txt = await file.text();
+    try{
+      const parsed = JSON.parse(txt);
+      // server expects { todos: [...] } or top-level array
+      if(parsed.todos) {
+        await api('/api/import', { method:'POST', body: { todos: parsed.todos }});
+        await loadAndRender(); alert('imported');
+      } else if(Array.isArray(parsed)){
+        await api('/api/import', { method:'POST', body: { todos: parsed }});
+        await loadAndRender(); alert('imported');
+      } else {
+        alert('invalid file');
+      }
+    }catch(err){ alert('import failed: '+err.message); }
+  }; f.click();
+});
+
+// Attempt auto-login only if token exists; verify by calling GET /api/tasks
+(async function tryAutoLogin(){
+  const token = localStorage.getItem('todo_token');
+  if(!token) return; // do nothing — tasks should remain hidden
+  try{
+    // call a lightweight endpoint to validate token and get user info
+    const resTasks = await api('/api/tasks', { method:'GET' });
+    // if valid, ask server for info by pinging /api/info (optional) or derive user from exported file
+    // There's no direct user endpoint; we get username from /api/export
+    try{
+      const exp = await api('/api/export', { method:'GET' });
+      const user = exp.meta && exp.meta.user ? exp.meta.user : null;
+      if(user){
+        // get createdAt from /api/info? We earlier returned createdAt on login; if not available we'll just show username.
+        // Use /api/tasks existed so token valid
+        onSuccessfulLogin(user, { createdAt: null });
+      } else {
+        // fallback: show signed in but keep auth panel hidden
+        nodes.authPanel.style.display = 'none';
+        nodes.who.textContent = 'Signed in';
+        await loadAndRender();
+      }
+    }catch(e){
+      // ignore
+      nodes.authPanel.style.display = 'none';
+      nodes.who.textContent = 'Signed in';
+      await loadAndRender();
+    }
+  }catch(e){
+    // token invalid or expired — clear and show login
+    localStorage.removeItem('todo_token');
+    onLogoutUI();
+  }
+})();
+
+</script>
+</body>
+</html>
